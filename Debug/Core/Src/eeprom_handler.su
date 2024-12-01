@@ -1,0 +1,5 @@
+../Core/Src/eeprom_handler.c:23:6:at24_isConnected	8	static
+../Core/Src/eeprom_handler.c:39:6:at24_write	48	static
+../Core/Src/eeprom_handler.c:96:6:at24_read	40	static
+../Core/Src/eeprom_handler.c:128:6:at24_eraseChip	56	static
+../Core/Src/eeprom_handler.c:141:8:check_eeprom	64	static
