@@ -1,7 +1,7 @@
-../Core/Src/washing_procedure.c:15:6:procedure_init	4	static
-../Core/Src/washing_procedure.c:19:6:run_procedure	24	static
-../Core/Src/washing_procedure.c:51:6:start_procedure	16	static
-../Core/Src/washing_procedure.c:55:6:m_fillWater	8	static
-../Core/Src/washing_procedure.c:80:6:m_wash	24	static
-../Core/Src/washing_procedure.c:143:6:m_rinse_and_drain	24	static
-../Core/Src/washing_procedure.c:172:6:m_spin	8	static
+../Core/Src/washing_procedure.c:20:6:procedure_init	4	static
+../Core/Src/washing_procedure.c:24:6:run_procedure	24	static
+../Core/Src/washing_procedure.c:56:6:start_procedure	16	static
+../Core/Src/washing_procedure.c:60:6:m_fillWater	8	static
+../Core/Src/washing_procedure.c:86:6:m_wash	16	static
+../Core/Src/washing_procedure.c:151:6:m_rinse_and_drain	8	static
+../Core/Src/washing_procedure.c:182:6:m_spin	8	static

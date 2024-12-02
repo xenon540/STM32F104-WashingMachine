@@ -59,14 +59,15 @@ int8_t procedure_run_flag = 0; // flag variable to indicate running washing proc
 
 bool relayOn = 0, motorRun = 0;
 bool ZC = 0; // zero crossing detected
-uint32_t freq_count = 0, g_previous_tick;
-uint8_t water_level;
+uint16_t freq_count = 0; //variable to count pulse from water sensor
+uint8_t water_level; //global variable to store water level
 
 uint16_t alpha;						// variable to control motor speed (dimmer)
 uint8_t mode_select[3] = {0, 0, 0}; // mang dung luu gia tri che do giat
-uint8_t backupData_eeprom[5];		// only use 5 bytes to store recovery data
+uint8_t backupData_eeprom[9];		// only use 9 bytes to store recovery data, see power_observer to know role of each byte
 const char *mode_names[5] = {"Giat thuong", "Giat ngam", "Giat nhanh", "Vat va xa", "Chi vat"};
 bool flag; // flag to keep home screen not refreshing continuously/anti flickering
+bool has_backup_data;
 
 /* USER CODE END PV */
 
@@ -106,7 +107,7 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 	if (GPIO_Pin == button1_Pin)
 	{
 		relayOn = !relayOn;
-		if (onStart)
+		if (onStart && has_backup_data)
 		{
 			continue_backup_run = true; // fix hêrre
 		}
@@ -243,7 +244,12 @@ int main(void)
 		// power_observer();
 		if (procedure_run_flag)
 		{
-			run_procedure(mode_select, water_level, &procedure_run_flag);
+			if (!HAL_GPIO_ReadPin(door_sensor_GPIO_Port, door_sensor_Pin) && current_step!=1) {
+				/*if door is open when in other step than filling water, stop program and display error message*/
+				// do smthing;
+			} else {
+				run_procedure(mode_select, water_level, &procedure_run_flag);
+			}
 		}
 
 		/* USER CODE END WHILE */
@@ -614,6 +620,7 @@ void updateLCD(int index)
 			lcd_send_string("Bkup available! ");
 			lcd_goto_XY(2, 0);
 			lcd_send_string("START to resume ");
+			has_backup_data = true;
 			return;
 		}
 	}
@@ -714,21 +721,35 @@ void updateLCD(int index)
 
 void power_observer(void)
 {
-	if (ZC == false && g_previous_tick == 0)
+	static uint32_t power_observer_tick;
+	if (ZC == false && power_observer_tick == 0)
 	{
-		g_previous_tick = HAL_GetTick();
+		power_observer_tick = HAL_GetTick();
 	}
 	else
 	{
-		g_previous_tick = 0;
+		power_observer_tick = 0;
 	}
-	if (HAL_GetTick() - g_previous_tick > 20)
+	if (HAL_GetTick() - power_observer_tick > 20)
 	{
 		// if no pulse in 20ms = 1 cycle means power loss detected
-		//  do smthing
+		//  start saving backup data if running (procedure_run_flag == true)
 		if (procedure_run_flag && at24_isConnected())
 		{
+			/*
+			* Luu trạng thái khi mất điện
+			* byte[0]: mode_select[0] - chế độ giặt
+			* byte[1]: mode_select[1] - mực nước
+			* byte[2]: mode_select[2] - số lần vắt xả
+			* byte[3]: current_step - bước giặt hiện tại
+			* byte[4]: rinsed_time - số lần vắt xả
+			* byte[5-8]: elapsed_time_per_mode - 4byte lưu thời gian đang giặt
+			*/
+			/*Luu cac bien the hien mode giat hien tai*/
 			at24_write(0, mode_select, 3, 500);
+			/*Luu cac bien extern tu washing_procedure*/
+			uint8_t data[6] = {current_step, rinsed_time, elapsed_time_per_mode>>24, elapsed_time_per_mode>>16, elapsed_time_per_mode>>8, elapsed_time_per_mode};
+			at24_write(3, data, 6, 500);
 		}
 	}
 	ZC = false; // set ZC false here, Pulse_EXTI can set it back to true, if not we can know that the power is off

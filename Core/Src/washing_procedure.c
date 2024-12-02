@@ -10,6 +10,11 @@ uint32_t m_wash_interval; //tong thoi gian chay cua buoc giat
 uint8_t m_rinse_and_drain_times; //so lan vat xa
 bool wash_done; // bien trang thai buoc giat xong
 
+/*Cac bien dung de luu trang thai, dung de luu vao eeprom khi mat dien*/
+uint32_t elapsed_time_per_mode; //thoi gian da chay cua tung buoc giat, dung de luu lai khi mat dien
+uint8_t rinsed_time; //so lan da xa
+uint8_t current_step; // buoc giat hien tai: 1 - xa nuoc, 2 - giat, 3 - xa, 4 - vat
+
 void (*runningFunc)();
 
 void procedure_init( void ) {
@@ -53,6 +58,7 @@ void start_procedure(uint8_t mode[]) {
 }
 
 void m_fillWater( void ) {
+    current_step = 1;
     lcd_goto_XY(2, 0);
     lcd_send_string("filling wota    ");
     if (m_mode_select[0] == 5) {
@@ -83,13 +89,15 @@ void m_wash( void ) {
     */
     static bool firstRun_wash = true, motor_dir;
     static uint32_t time_wash, change_direction_time;
+    current_step = 2;
+    elapsed_time_per_mode = time_wash + m_wash_interval - HAL_GetTick();
     if ( firstRun_wash ) {
         time_wash = HAL_GetTick(); // thoi gian bat dau giat
         change_direction_time = time_wash; 
         firstRun_wash = false;
     }
     
-    char data[16];
+    // char data[16];
     // sprintf(data, "Wa:%d %d", m_current_water_level, m_mode_select[1]*10 );
     // lcd_goto_XY(1, 0);
     // lcd_send_string(data);
@@ -145,7 +153,9 @@ void m_rinse_and_drain( void ) {
     * Ham chu trinh vat xa
     */
     static uint8_t rinse_times = 0; // so lan vat xa da thuc hien
-    char data[16];
+    current_step = 3;
+    rinsed_time = rinse_times;
+    // char data[16];
     // sprintf(data, "rnd:%d-  %d         ", m_current_water_level, rinse_times);
     // lcd_goto_XY(1, 0);
     // lcd_send_string(data);
@@ -173,6 +183,9 @@ void m_spin( void ) {
     /*
     * Ham chi xa, quay dong co max 10s
     */
+    current_step = 4;
+    //nao mat dien ma co dien lai thi cho quay lai tu dau luon cho roi =)))
+
     static bool firstRun_spin = true;
     static uint32_t time_spin;
     if ( firstRun_spin ) {
@@ -192,6 +205,9 @@ void m_spin( void ) {
         HAL_GPIO_WritePin(triac_gate_GPIO_Port, triac_gate_Pin, GPIO_PIN_SET);
         HAL_GPIO_WritePin(relay_GPIO_Port, relay_Pin, GPIO_PIN_SET);
     } else {
+        HAL_GPIO_WritePin(drain_gate_GPIO_Port, drain_gate_Pin, GPIO_PIN_RESET);
+        HAL_GPIO_WritePin(triac_gate_GPIO_Port, triac_gate_Pin, GPIO_PIN_RESET);
+        HAL_GPIO_WritePin(relay_GPIO_Port, relay_Pin, GPIO_PIN_RESET);
         wash_done = true;
         firstRun_spin = true; //reset bit
         runningFunc = &start_procedure; //return to start function
