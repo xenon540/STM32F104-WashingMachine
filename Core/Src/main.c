@@ -54,7 +54,7 @@ TIM_HandleTypeDef htim2;
 TIM_HandleTypeDef htim4;
 
 /* USER CODE BEGIN PV */
-bool onStart = true, continue_backup_run = false;
+bool onStart = true, backup_run_flag = false;
 int8_t procedure_run_flag = 0; // flag variable to indicate running washing procedure or not
 
 bool relayOn = 0, motorRun = 0;
@@ -65,7 +65,7 @@ uint8_t water_level; //global variable to store water level
 uint16_t alpha;						// variable to control motor speed (dimmer)
 uint8_t mode_select[3] = {0, 0, 0}; // mang dung luu gia tri che do giat
 uint8_t backupData_eeprom[9];		// only use 9 bytes to store recovery data, see power_observer to know role of each byte
-const char *mode_names[5] = {"Giat thuong", "Giat ngam", "Giat nhanh", "Vat va xa", "Chi vat"};
+const char *mode_names[5] = {"Giat thuong", "Giat ngam", "Giat nhanh", "Giat nhe", "Chi vat"};
 bool flag; // flag to keep home screen not refreshing continuously/anti flickering
 bool has_backup_data;
 
@@ -82,6 +82,7 @@ static void MX_TIM4_Init(void);
 /* USER CODE BEGIN PFP */
 void updateLCD(int index);
 void power_observer(void);
+void making_beep_sound( int times );
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -106,10 +107,17 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 	}
 	if (GPIO_Pin == button1_Pin)
 	{
-		relayOn = !relayOn;
+		// relayOn = !relayOn;
+		// motorRun = !motorRun;
+		/////test
+		alpha += 100;
+		if (alpha > 1000) {
+			alpha = 100;
+		}
+
 		if (onStart && has_backup_data)
 		{
-			continue_backup_run = true; // fix hêrre
+			backup_run_flag = true; // fix hêrre
 		}
 		else
 		{
@@ -226,10 +234,6 @@ int main(void)
 	MX_TIM4_Init();
 	/* USER CODE BEGIN 2 */
 	HAL_Delay(1000); // delay 1000ms to wait for everything
-	// if (ZC)
-	// {
-	// 	onStart = true;
-	// }
 	lcd_init();
 	updateLCD(100);
 	onStart = false;
@@ -242,13 +246,21 @@ int main(void)
 	{
 		updateLCD(100);
 		// power_observer();
+		if (backup_run_flag) {
+			if (!HAL_GPIO_ReadPin(door_sensor_GPIO_Port, door_sensor_Pin) && current_step!=1) {
+				/*if door is open when in other step than filling water, stop program and display error message*/
+				// do smthing;
+			} else {
+				run_procedure(mode_select, water_level, &procedure_run_flag, &motorRun, &alpha);
+			}
+		}
 		if (procedure_run_flag)
 		{
 			if (!HAL_GPIO_ReadPin(door_sensor_GPIO_Port, door_sensor_Pin) && current_step!=1) {
 				/*if door is open when in other step than filling water, stop program and display error message*/
 				// do smthing;
 			} else {
-				run_procedure(mode_select, water_level, &procedure_run_flag);
+				run_procedure(mode_select, water_level, &procedure_run_flag, &motorRun, &alpha);
 			}
 		}
 
@@ -433,7 +445,7 @@ static void MX_TIM2_Init(void)
 
 	/* USER CODE END TIM2_Init 1 */
 	htim2.Instance = TIM2;
-	htim2.Init.Prescaler = 16 - 1;
+	htim2.Init.Prescaler = 80-1;
 	htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
 	htim2.Init.Period = 0xFFFF - 1;
 	htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
@@ -466,7 +478,7 @@ static void MX_TIM2_Init(void)
 		Error_Handler();
 	}
 	/* USER CODE BEGIN TIM2_Init 2 */
-
+	HAL_NVIC_SystemReset();
 	/* USER CODE END TIM2_Init 2 */
 	HAL_TIM_MspPostInit(&htim2);
 }
@@ -754,6 +766,7 @@ void power_observer(void)
 	}
 	ZC = false; // set ZC false here, Pulse_EXTI can set it back to true, if not we can know that the power is off
 }
+
 /* USER CODE END 4 */
 
 /**

@@ -11,12 +11,14 @@ extern uint8_t rinsed_time;
 extern uint8_t current_step;
 
 void procedure_init( void );
-void run_procedure( uint8_t mode[], uint8_t water_level, bool *procedure_run_flag );
+void run_procedure( uint8_t mode[], uint8_t water_level, bool *procedure_run_flag, bool *motorRun, uint16_t *alpha );
 void start_procedure(uint8_t mode[]);
 
 void m_fillWater( void );
 void m_wash( void );
 void m_rinse_and_drain( void );
 void m_spin( void );
+
+void making_beep_sound( int times );
 
 #endif
