@@ -54,7 +54,7 @@ TIM_HandleTypeDef htim2;
 TIM_HandleTypeDef htim4;
 
 /* USER CODE BEGIN PV */
-bool onStart = true, backup_run_flag = false;
+bool onStart = true, backup_run_flag = false, power_loss_flag = false; 
 int8_t procedure_run_flag = 0; // flag variable to indicate running washing procedure or not
 
 bool relayOn = 0, motorRun = 0;
@@ -96,6 +96,9 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 	if (GPIO_Pin == pulse_input_Pin)
 	{
 		ZC = true;
+		if (power_loss_flag) {
+			// HAL_NVIC_SystemReset();
+		}
 		// turn on triac and start timer 2
 		if (motorRun)
 		{
@@ -107,16 +110,17 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 	}
 	if (GPIO_Pin == button1_Pin)
 	{
-		// relayOn = !relayOn;
+		relayOn = !relayOn;
 		// motorRun = !motorRun;
 		/////test
-		alpha += 100;
-		if (alpha > 1000) {
-			alpha = 100;
-		}
-
+		// alpha += 100;
+		// if (alpha > 1000) {
+		// 	alpha = 100;
+		// }
+		// onStart = false;
 		if (onStart && has_backup_data)
 		{
+			/* nếu là vừa mở máy, có dữ liệu backup và nút start được nhấn thì chạy ctrinh backup*/
 			backup_run_flag = true; // fix hêrre
 		}
 		else
@@ -126,59 +130,64 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 				if ((mode_select[0] != 0 && mode_select[1] != 0 && mode_select[2] != 0) || (mode_select[0] == 5))
 				{
 					flag = true;
-					procedure_run_flag = 1;
+					procedure_run_flag = 1; // chạy ok
 				}
 				else
 				{
 					flag = true;
-					procedure_run_flag = -1;
+					procedure_run_flag = -1; //lỗi chưa chọn đủ input
+				}
+				if (procedure_run_flag == -3) { // tiếp tục chạy sau khi đã đóng cửa
+					procedure_run_flag = 1;
 				}
 			}
 			else
 			{
 				flag = true;
-				procedure_run_flag = -2;
+				procedure_run_flag = -2; //lỗi chưa đongs cửa
 			}
 		}
 	}
-	if (GPIO_Pin == button2_Pin)
-	{
-		/*
-		mode_select[0] - bien luu che do giat
-		== 1 : giat thuong
-		== 2 : giat ngam (giat lau lau lau)
-		== 3 : giat nhanh (giat nhe)
-		== 4 : vat va xa
-		== 5 : chi xa
-		*/
-		mode_select[0]++;
-		if (mode_select[0] > 5)
+	if (!procedure_run_flag) {
+		if (GPIO_Pin == button2_Pin)
 		{
-			mode_select[0] = 1;
+			/*
+			mode_select[0] - bien luu che do giat
+			== 1 : giat thuong
+			== 2 : giat ngam (giat lau lau lau)
+			== 3 : giat nhanh (giat nhe)
+			== 4 : vat va xa
+			== 5 : chi xa
+			*/
+			mode_select[0]++;
+			if (mode_select[0] > 5)
+			{
+				mode_select[0] = 1;
+			}
 		}
-	}
-	if (GPIO_Pin == button3_Pin)
-	{
-		/*
-		mode_select[1] - bien luu muc nuoc
-		== i : muc nuoc = (i*10)%
-		*/
-		mode_select[1]++;
-		if (mode_select[1] > 10)
+		if (GPIO_Pin == button3_Pin)
 		{
-			mode_select[1] = 1;
+			/*
+			mode_select[1] - bien luu muc nuoc
+			== i : muc nuoc = (i*10)%
+			*/
+			mode_select[1]++;
+			if (mode_select[1] > 10)
+			{
+				mode_select[1] = 1;
+			}
 		}
-	}
-	if (GPIO_Pin == button4_Pin)
-	{
-		/*
-		mode_select[2] - bien luu so lan xa
-		== i : so lan xa = i (i <= 3)
-		*/
-		mode_select[2]++;
-		if (mode_select[2] > 3)
+		if (GPIO_Pin == button4_Pin)
 		{
-			mode_select[2] = 1;
+			/*
+			mode_select[2] - bien luu so lan xa
+			== i : so lan xa = i (i <= 3)
+			*/
+			mode_select[2]++;
+			if (mode_select[2] > 3)
+			{
+				mode_select[2] = 1;
+			}
 		}
 	}
 }
@@ -247,23 +256,33 @@ int main(void)
 		updateLCD(100);
 		// power_observer();
 		if (backup_run_flag) {
-			if (!HAL_GPIO_ReadPin(door_sensor_GPIO_Port, door_sensor_Pin) && current_step!=1) {
+			if (HAL_GPIO_ReadPin(door_sensor_GPIO_Port, door_sensor_Pin) && current_step!=1) {
 				/*if door is open when in other step than filling water, stop program and display error message*/
-				// do smthing;
+				motorRun = false; // tắt động cơ
+				flag = true; //display door error message
+				procedure_run_flag = -3;
 			} else {
 				run_procedure(mode_select, water_level, &procedure_run_flag, &motorRun, &alpha);
 			}
 		}
-		if (procedure_run_flag)
+		if (procedure_run_flag == 1 )
 		{
-			if (!HAL_GPIO_ReadPin(door_sensor_GPIO_Port, door_sensor_Pin) && current_step!=1) {
+			if (HAL_GPIO_ReadPin(door_sensor_GPIO_Port, door_sensor_Pin) && current_step!=1) {
 				/*if door is open when in other step than filling water, stop program and display error message*/
-				// do smthing;
+				motorRun = false; // tắt động cơ
+				flag = true; //display door error message
+				procedure_run_flag = -3;
 			} else {
 				run_procedure(mode_select, water_level, &procedure_run_flag, &motorRun, &alpha);
 			}
 		}
-
+		// if (!relayOn) {
+		// 	HAL_GPIO_WritePin(buzzer_GPIO_Port, buzzer_Pin, GPIO_PIN_RESET);
+		// 	HAL_GPIO_WritePin(relay_GPIO_Port, relay_Pin, GPIO_PIN_RESET);
+		// } else {
+		// 	HAL_GPIO_WritePin(buzzer_GPIO_Port, buzzer_Pin, GPIO_PIN_SET);
+		// 	HAL_GPIO_WritePin(relay_GPIO_Port, relay_Pin, GPIO_PIN_SET);
+		// }
 		/* USER CODE END WHILE */
 
 		/* USER CODE BEGIN 3 */
@@ -478,7 +497,7 @@ static void MX_TIM2_Init(void)
 		Error_Handler();
 	}
 	/* USER CODE BEGIN TIM2_Init 2 */
-	HAL_NVIC_SystemReset();
+
 	/* USER CODE END TIM2_Init 2 */
 	HAL_TIM_MspPostInit(&htim2);
 }
@@ -638,6 +657,7 @@ void updateLCD(int index)
 	}
 	else
 	{
+		/* nếu chọn chế độ thay đổi thì mới cập nhật LCD */
 		for (int i = 0; i < 3; i++)
 		{
 			if (previous_mode[i] != mode_select[i])
@@ -688,11 +708,12 @@ void updateLCD(int index)
 		}
 		if (procedure_run_flag == 1 && flag)
 		{
-			flag = false;
-			lcd_goto_XY(1, 0);
-			lcd_send_string("    Running...  ");
-			lcd_goto_XY(2, 0);
-			lcd_send_string("Remains: 1h45m");
+			/*hiển thị trực tiếp trong washing_procedure nên khi chạy thì k hiện gì ở đây*/
+			// flag = false;
+			// lcd_goto_XY(1, 0);
+			// lcd_send_string("    Running...  ");
+			// lcd_goto_XY(2, 0);
+			// lcd_send_string("Remains: 1h45m");
 			return;
 		}
 		else if (procedure_run_flag == -1 && flag)
@@ -714,6 +735,15 @@ void updateLCD(int index)
 			lcd_send_string("close to run!   ");
 			procedure_run_flag = 0; // set procedure_run_flag = 0 to display Home back
 			return;
+		} else if (procedure_run_flag == -3 && flag)
+		{
+			flag = false;
+			lcd_goto_XY(1, 0);
+			lcd_send_string("Lid oppened, cl-");
+			lcd_goto_XY(2, 0);
+			lcd_send_string("ose to continue!");
+			procedure_run_flag = 0; // set procedure_run_flag = 0 to display Home back
+			return;
 		}
 		if ((HAL_GetTick() - previous_tick > 2000) && flag)
 		{
@@ -724,7 +754,7 @@ void updateLCD(int index)
 			sprintf(data, " %s", mode_names[previous_mode[0] - 1]);
 			lcd_goto_XY(1, 0);
 			lcd_send_string(data);
-			sprintf(data, "Nuoc: %d%% Xa: %d", previous_mode[1] * 10, water_level);
+			sprintf(data, "Nuoc: %d%% Xa: %d", previous_mode[1] * 10, previous_mode[2]);
 			lcd_goto_XY(2, 0);
 			lcd_send_string(data);
 		}
@@ -763,6 +793,7 @@ void power_observer(void)
 			uint8_t data[6] = {current_step, rinsed_time, elapsed_time_per_mode>>24, elapsed_time_per_mode>>16, elapsed_time_per_mode>>8, elapsed_time_per_mode};
 			at24_write(3, data, 6, 500);
 		}
+		power_loss_flag = true; 
 	}
 	ZC = false; // set ZC false here, Pulse_EXTI can set it back to true, if not we can know that the power is off
 }

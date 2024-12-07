@@ -19,6 +19,6 @@ void m_wash( void );
 void m_rinse_and_drain( void );
 void m_spin( void );
 
-void making_beep_sound( int times );
+void making_3_beep_sound( void );
 
 #endif

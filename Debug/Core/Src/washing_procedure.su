@@ -1,8 +1,8 @@
 ../Core/Src/washing_procedure.c:20:6:procedure_init	4	static
 ../Core/Src/washing_procedure.c:24:6:run_procedure	24	static
 ../Core/Src/washing_procedure.c:60:6:start_procedure	16	static
-../Core/Src/washing_procedure.c:64:6:m_fillWater	8	static
-../Core/Src/washing_procedure.c:90:6:m_wash	16	static
-../Core/Src/washing_procedure.c:155:6:m_rinse_and_drain	8	static
-../Core/Src/washing_procedure.c:186:6:m_spin	8	static
-../Core/Src/washing_procedure.c:221:6:making_beep_sound	24	static
+../Core/Src/washing_procedure.c:64:6:m_fillWater	24	static
+../Core/Src/washing_procedure.c:90:6:m_wash	32	static
+../Core/Src/washing_procedure.c:154:6:m_rinse_and_drain	24	static
+../Core/Src/washing_procedure.c:185:6:m_spin	24	static
+../Core/Src/washing_procedure.c:219:6:making_3_beep_sound	8	static
