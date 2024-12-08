@@ -54,19 +54,19 @@ TIM_HandleTypeDef htim2;
 TIM_HandleTypeDef htim4;
 
 /* USER CODE BEGIN PV */
-bool onStart = true, backup_run_flag = false, power_loss_flag = false; 
-int8_t procedure_run_flag = 0; // flag variable to indicate running washing procedure or not
+volatile bool onStart = true, backup_run_flag = false, power_loss_flag = false; 
+volatile int8_t procedure_run_flag = 0; // flag variable to indicate running washing procedure or not
 
-bool relayOn = 0, motorRun = 0;
-bool ZC = 0; // zero crossing detected
-uint16_t freq_count = 0; //variable to count pulse from water sensor
-uint8_t water_level; //global variable to store water level
+bool relayOn = 0, motorRun = 0, paused = 0;
+volatile bool ZC = 0; // zero crossing detected
+volatile uint16_t freq_count = 0; //variable to count pulse from water sensor
+volatile uint8_t water_level; //global variable to store water level
 
 uint16_t alpha;						// variable to control motor speed (dimmer)
-uint8_t mode_select[3] = {0, 0, 0}; // mang dung luu gia tri che do giat
+volatile uint8_t mode_select[3] = {0, 0, 0}; // mang dung luu gia tri che do giat
 uint8_t backupData_eeprom[9];		// only use 9 bytes to store recovery data, see power_observer to know role of each byte
 const char *mode_names[5] = {"Giat thuong", "Giat ngam", "Giat nhanh", "Giat nhe", "Chi vat"};
-bool flag; // flag to keep home screen not refreshing continuously/anti flickering
+volatile bool flag; // flag to keep home screen not refreshing continuously/anti flickering
 bool has_backup_data;
 
 /* USER CODE END PV */
@@ -80,8 +80,8 @@ static void MX_I2C1_Init(void);
 static void MX_I2C2_Init(void);
 static void MX_TIM4_Init(void);
 /* USER CODE BEGIN PFP */
-void updateLCD(int index);
-void power_observer(void);
+void updateLCD( void );
+void power_observer( void );
 void making_beep_sound( int times );
 /* USER CODE END PFP */
 
@@ -104,20 +104,11 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 		{
 			__HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, alpha); // Change CCR1 value dynamically
 			HAL_TIM_OC_Start_IT(&htim2, TIM_CHANNEL_1);			 // Starts the timer
-			HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_SET);
 			HAL_GPIO_WritePin(triac_gate_GPIO_Port, triac_gate_Pin, GPIO_PIN_SET);
 		}
 	}
 	if (GPIO_Pin == button1_Pin)
 	{
-		relayOn = !relayOn;
-		// motorRun = !motorRun;
-		/////test
-		// alpha += 100;
-		// if (alpha > 1000) {
-		// 	alpha = 100;
-		// }
-		// onStart = false;
 		if (onStart && has_backup_data)
 		{
 			/* nếu là vừa mở máy, có dữ liệu backup và nút start được nhấn thì chạy ctrinh backup*/
@@ -125,26 +116,37 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 		}
 		else
 		{
-			if (!HAL_GPIO_ReadPin(door_sensor_GPIO_Port, door_sensor_Pin))
-			{
-				if ((mode_select[0] != 0 && mode_select[1] != 0 && mode_select[2] != 0) || (mode_select[0] == 5))
+			if (procedure_run_flag == 1) {
+				flag = true;
+				paused = true;
+				procedure_run_flag = -4; //tam dung
+			} else if(procedure_run_flag == -4) {
+				flag = true;
+				paused = false;
+				procedure_run_flag = 1; // tiep tuc
+			}
+			if ( !paused ) {
+				if (!HAL_GPIO_ReadPin(door_sensor_GPIO_Port, door_sensor_Pin))
 				{
-					flag = true;
-					procedure_run_flag = 1; // chạy ok
+					if ((mode_select[0] != 0 && mode_select[1] != 0 && mode_select[2] != 0) || (mode_select[0] == 5))
+					{
+						flag = true;
+						procedure_run_flag = 1; // chạy ok
+					}
+					else
+					{
+						flag = true;
+						procedure_run_flag = -1; //lỗi chưa chọn đủ input
+					}
+					if (procedure_run_flag == -3) { // tiếp tục chạy sau khi đã đóng cửa
+						procedure_run_flag = 1;
+					}
 				}
 				else
 				{
 					flag = true;
-					procedure_run_flag = -1; //lỗi chưa chọn đủ input
+					procedure_run_flag = -2; //lỗi chưa đongs cửa
 				}
-				if (procedure_run_flag == -3) { // tiếp tục chạy sau khi đã đóng cửa
-					procedure_run_flag = 1;
-				}
-			}
-			else
-			{
-				flag = true;
-				procedure_run_flag = -2; //lỗi chưa đongs cửa
 			}
 		}
 	}
@@ -202,7 +204,13 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 		 * Water level: 0% ~ f = 11300Hz; 100% ~ f = 9000Hz
 		 * Need to make a graph for this, temporarily use Linear
 		 */
-		water_level = (int)(freq_count - 9000.0) / (11300.0 - 9000.0) * 100.0; // convert into 0-100%
+		water_level = (int)(-0.05 * freq_count + 550); // convert into 0-100% ax+b
+		// char data[16];
+		// sprintf(data, "w:%d c:%d%%", freq_count, water_level );
+		// lcd_goto_XY(1, 0);
+		// lcd_send_string("test water level");
+		// lcd_goto_XY(2, 0);
+		// lcd_send_string(data);
 		freq_count = 0;
 	}
 }
@@ -244,7 +252,7 @@ int main(void)
 	/* USER CODE BEGIN 2 */
 	HAL_Delay(1000); // delay 1000ms to wait for everything
 	lcd_init();
-	updateLCD(100);
+	updateLCD();
 	onStart = false;
 	procedure_init();
 	/* USER CODE END 2 */
@@ -253,7 +261,7 @@ int main(void)
 	/* USER CODE BEGIN WHILE */
 	while (1)
 	{
-		updateLCD(100);
+		updateLCD();
 		// power_observer();
 		if (backup_run_flag) {
 			if (HAL_GPIO_ReadPin(door_sensor_GPIO_Port, door_sensor_Pin) && current_step!=1) {
@@ -624,7 +632,7 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
-void updateLCD(int index)
+void updateLCD( void )
 {
 	/*
 	Updating LCD if index is different from current index;
@@ -709,11 +717,6 @@ void updateLCD(int index)
 		if (procedure_run_flag == 1 && flag)
 		{
 			/*hiển thị trực tiếp trong washing_procedure nên khi chạy thì k hiện gì ở đây*/
-			// flag = false;
-			// lcd_goto_XY(1, 0);
-			// lcd_send_string("    Running...  ");
-			// lcd_goto_XY(2, 0);
-			// lcd_send_string("Remains: 1h45m");
 			return;
 		}
 		else if (procedure_run_flag == -1 && flag)
@@ -744,7 +747,14 @@ void updateLCD(int index)
 			lcd_send_string("ose to continue!");
 			procedure_run_flag = 0; // set procedure_run_flag = 0 to display Home back
 			return;
-		}
+		} else if (procedure_run_flag == -4 && flag)
+		{
+			flag = false;
+			lcd_clear_display();
+			lcd_goto_XY(1, 0);
+			lcd_send_string("Washing paused! ");
+			return;
+		} 
 		if ((HAL_GetTick() - previous_tick > 2000) && flag)
 		{
 			// This is HOME SCREEN, get back to Home after 2000ms
@@ -782,15 +792,15 @@ void power_observer(void)
 			* Luu trạng thái khi mất điện
 			* byte[0]: mode_select[0] - chế độ giặt
 			* byte[1]: mode_select[1] - mực nước
-			* byte[2]: mode_select[2] - số lần vắt xả
+			* byte[2]: mode_select[2] - số lần xả yêu cầu
 			* byte[3]: current_step - bước giặt hiện tại
-			* byte[4]: rinsed_time - số lần vắt xả
+			* byte[4]: drained_times - số lần xả đã thực hiện
 			* byte[5-8]: elapsed_time_per_mode - 4byte lưu thời gian đang giặt
 			*/
 			/*Luu cac bien the hien mode giat hien tai*/
 			at24_write(0, mode_select, 3, 500);
 			/*Luu cac bien extern tu washing_procedure*/
-			uint8_t data[6] = {current_step, rinsed_time, elapsed_time_per_mode>>24, elapsed_time_per_mode>>16, elapsed_time_per_mode>>8, elapsed_time_per_mode};
+			uint8_t data[6] = {current_step, drained_times, elapsed_time_per_mode>>24, elapsed_time_per_mode>>16, elapsed_time_per_mode>>8, elapsed_time_per_mode};
 			at24_write(3, data, 6, 500);
 		}
 		power_loss_flag = true; 

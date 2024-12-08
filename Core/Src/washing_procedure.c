@@ -4,15 +4,15 @@
 //static uint32_t washing_timer = 0;
 
 uint8_t m_mode_select[3];
-uint8_t m_current_water_level;
+uint32_t m_current_water_level;
 
 uint32_t m_wash_interval; //tong thoi gian chay cua buoc giat
-uint8_t m_rinse_and_drain_times; //so lan vat xa
+uint8_t m_drain_times; //so lan xa
 bool wash_done; // bien trang thai buoc giat xong
 bool *p_motorRun; //pointer to motorRun
 /*Cac bien dung de luu trang thai, dung de luu vao eeprom khi mat dien*/
 uint32_t elapsed_time_per_mode; //thoi gian da chay cua tung buoc giat, dung de luu lai khi mat dien
-uint8_t rinsed_time; //so lan da xa
+uint8_t drained_times; //so lan da xa
 uint8_t current_step; // buoc giat hien tai: 1 - xa nuoc, 2 - giat, 3 - xa, 4 - vat
 
 void (*runningFunc)();
@@ -27,10 +27,10 @@ void run_procedure( uint8_t mode[], uint8_t water_level, bool *procedure_run_fla
         /* after washing done, stop procedure*/
         *procedure_run_flag = false;
     }
-    m_current_water_level = water_level;
-    p_motorRun = motorRun;
     if (runningFunc == &start_procedure) {
         wash_done = false;
+        m_current_water_level = water_level; //gán địa chỉ, chỉ cần gán 1 lần nên bỏ vô đây
+        p_motorRun = motorRun; //gán địa chỉ, chỉ cần gán 1 lần nên bỏ vô đây
         m_mode_select[0] = mode[0];
         m_mode_select[1] = mode[1];
         m_mode_select[2] = mode[2];
@@ -52,7 +52,64 @@ void run_procedure( uint8_t mode[], uint8_t water_level, bool *procedure_run_fla
             case 5: 
                 m_wash_interval = 0; // chi vat, k giat
         }
-        m_rinse_and_drain_times = m_mode_select[2];
+        m_drain_times = m_mode_select[2];
+        drained_times = 0;
+    }
+    runningFunc();
+}
+
+void run_procedure_backup( uint8_t backup_mode_data[], uint8_t water_level, bool *backup_run_flag, bool *motorRun, uint16_t *alpha) {
+    /*Các biến được truyền vào dạng tham chiếu nhằm thay đổi địa chỉ trong các hàm này*/
+    if (wash_done) {
+        /* after washing done, stop procedure*/
+        *backup_run_flag = false;
+    }
+    m_current_water_level = water_level;
+    p_motorRun = motorRun;
+    if (runningFunc == &start_procedure) {
+        wash_done = false;
+        m_current_water_level = water_level; //gán địa chỉ, chỉ cần gán 1 lần nên bỏ vô đây
+        p_motorRun = motorRun; //gán địa chỉ, chỉ cần gán 1 lần nên bỏ vô đây
+        m_mode_select[0] = backup_mode_data[0];
+        m_mode_select[1] = backup_mode_data[1];
+        m_mode_select[2] = backup_mode_data[2];
+        *alpha = 1000;
+        switch( m_mode_select[0]) {
+            case 1: 
+                m_wash_interval = 15000; //giat thuong, giat trong 15s
+                break;
+            case 2:
+                m_wash_interval = 25000; //giat ngam, giat trong 25s
+                break;
+            case 3: 
+                m_wash_interval = 10000; //giat nhanh, giat trong 10s
+                break;
+            case 4:
+                m_wash_interval = 15000; //giat nhe, quay cham hon
+                *alpha = 750; //giặt nhẹ đặt alpha bé, quay chậm hơn
+                break;
+            case 5: 
+                m_wash_interval = 0; // chi vat, k giat
+        }
+        m_drain_times = m_mode_select[2];
+        drained_times = backup_mode_data[4];
+        switch (backup_mode_data[3]) {
+            case 1: 
+                runningFunc = &m_fillWater;
+                break;
+            case 2:
+                runningFunc = &m_wash;
+                break;
+            case 3: 
+                runningFunc = &m_drain;
+                drained_times = backup_mode_data[4];
+                break;
+            case 4:
+                runningFunc = &m_spin;
+                break;
+            case 5:
+                making_3_beep_sound;
+        }
     }
     runningFunc();
 }
@@ -67,17 +124,17 @@ void m_fillWater( void ) {
         runningFunc = &m_spin;
     } else {
         current_step = 1;
-        uint8_t data[16];
-        lcd_goto_XY(1, 0);
-        lcd_send_string("Fi.");
-        // sprintf(data, "Set:%d Cur:%d     ", sizeof(m_mode_select[1]*10)+ sizeof(m_current_water_level), 1 );
-        // lcd_goto_XY(2, 0);
-        // lcd_send_string(data);
-        if ( m_current_water_level <= m_mode_select[1]*10 ) {
-        /*
-        * Ham chu trinh xa nuoc 
-        * Neu nuoc chua du, tiep tuc xa nuoc
-        */
+        if ( m_current_water_level <= m_mode_select[1]*10 ) { 
+            /*
+            * Ham chu trinh xa nuoc 
+            * Neu nuoc chua du, tiep tuc xa nuoc
+            */
+        	uint8_t data[16];
+            // sprintf(data, "Set:%d Cur: %d       ", m_mode_select[1]*10, m_current_water_level);
+            lcd_goto_XY(1, 0);
+            lcd_send_string("Filling water...");
+            lcd_goto_XY(2, 0);
+            lcd_send_string("holder wtlevel  ");
             HAL_GPIO_WritePin(water_in_GPIO_Port, water_in_Pin, GPIO_PIN_SET);
         } else {
             HAL_GPIO_WritePin(water_in_GPIO_Port, water_in_Pin, GPIO_PIN_RESET);
@@ -103,8 +160,8 @@ void m_wash( void ) {
     
     char data[16];
     lcd_goto_XY(1, 0);
-    lcd_send_string(motor_dir? "washing -       ":"washing +       ");
-    sprintf(data, "Now:%d Set:%d", HAL_GetTick()-time_wash, m_wash_interval);
+    lcd_send_string(motor_dir? "Washing -       ":"Washing +       ");
+    sprintf(data, "tm:%ds sp:%ds          ", (HAL_GetTick()-time_wash)/1000, m_wash_interval/1000);
     lcd_goto_XY(2, 0);
     lcd_send_string(data);
     if (m_mode_select[0] != 2 ) { // giat ngam
@@ -130,7 +187,7 @@ void m_wash( void ) {
             /* Giat xong, tat dong co, chuyen sang vat va xa */
             *p_motorRun = false;
             firstRun_wash = true; //reset bit
-            runningFunc = &m_rinse_and_drain; //giat xong, chuyen sang xa
+            runningFunc = &m_drain; //giat xong, chuyen sang xa
         }
     } else {
         /* Cac mode giat con lai */
@@ -146,36 +203,36 @@ void m_wash( void ) {
             /* Giat xong, tat dong co, chuyen sang vat va xa */
             *p_motorRun = false;
             firstRun_wash = true; //reset bit
-            runningFunc = &m_rinse_and_drain; //giat xong, chuyen sang xa
+            runningFunc = &m_drain; //giat xong, chuyen sang xa
         }
     }
 }
 
-void m_rinse_and_drain( void ) {
+void m_drain( void ) {
     /*
     * Ham chu trinh vat xa
     */
-    static uint8_t rinse_times = 0; // so lan vat xa da thuc hien
     current_step = 3;
-    rinsed_time = rinse_times;
     char data[16];
     lcd_goto_XY(1, 0);
     lcd_send_string("Draining...     ");
-    sprintf(data, "#:%d - Level:%d         ", m_current_water_level, rinse_times);
+    // sprintf(data, "#:%d - Level:%d         ", m_current_water_level, drained_times);
     lcd_goto_XY(2, 0);
-    lcd_send_string(data);
+    lcd_send_string("holder wtlevel  ");
     if (m_current_water_level >= 10) {
         HAL_GPIO_WritePin(drain_gate_GPIO_Port, drain_gate_Pin, GPIO_PIN_SET);
         HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_SET);
     } else {
         HAL_GPIO_WritePin(drain_gate_GPIO_Port, drain_gate_Pin, GPIO_PIN_RESET);
         HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_RESET);
-        rinse_times++;
-        if (rinse_times != m_mode_select[2]) {
+        lcd_goto_XY(2, 4);
+        lcd_send_string("got here");
+        drained_times++;
+        if (drained_times != m_mode_select[2]) {
             runningFunc = &m_fillWater;
         } else {
             // xa du so lan roi thi xoay de vat thoi let's go
-            rinse_times = 0; //reset bien dem
+            drained_times = 0; //reset bien dem
             runningFunc = &m_spin;
         }
         
@@ -197,7 +254,7 @@ void m_spin( void ) {
     }
 
     char data[16];
-    sprintf(data, "sp:%d %d", HAL_GetTick()-time_spin, time_spin );
+    sprintf(data, "tm:%ds sp:%ds", (HAL_GetTick()-time_spin)/1000, 10 );
     lcd_goto_XY(1, 0);
     lcd_send_string("Spinning...     ");
     lcd_goto_XY(2, 0);
@@ -222,7 +279,7 @@ void making_3_beep_sound( void ) {
     static bool beep = false;
     static uint32_t time_beep;
     static uint8_t beep_count = 0;
-    
+    current_step = 5;
     lcd_clear_display();
     lcd_goto_XY(2, 4);
     lcd_send_string("Wash done!");
@@ -239,11 +296,11 @@ void making_3_beep_sound( void ) {
         runningFunc = &start_procedure; //return to start function
         HAL_Delay(100);
     } else {
+        HAL_GPIO_WritePin(buzzer_GPIO_Port, buzzer_Pin, beep ? GPIO_PIN_SET : GPIO_PIN_RESET);
         if (HAL_GetTick() - time_beep > 800) {
             beep = !beep;
             beep_count += (beep ? 1 : 0);
             time_beep = HAL_GetTick();
         }
-        HAL_GPIO_WritePin(buzzer_GPIO_Port, buzzer_Pin, beep ? GPIO_PIN_SET : GPIO_PIN_RESET);
     }
 }

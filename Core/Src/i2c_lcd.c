@@ -62,7 +62,9 @@ void lcd_send_eeprom_string (uint8_t *data)
 }
 void lcd_clear_display (void)
 {
-	lcd_send_cmd (0x01); //clear display
+	// lcd_send_cmd (0x01); //clear display - cais nafy dung nhu cut
+	lcd_goto_XY(1,0); lcd_send_string("                ");
+	lcd_goto_XY(2,0); lcd_send_string("                ");
 }
 
 void lcd_goto_XY (int row, int col)

@@ -223,7 +223,6 @@ void TIM2_IRQHandler(void)
 // Check if the interrupt was triggered by Output Compare match on Channel 1
 	if (__HAL_TIM_GET_IT_SOURCE(&htim2, TIM_IT_CC1))
 	{
-		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET); // Toggle an LED or perform action
 		HAL_GPIO_WritePin(GPIOB, GPIO_PIN_3, GPIO_PIN_RESET); //Reset triac pin
 		// Clear the interrupt flag
 		__HAL_TIM_CLEAR_IT(&htim2, TIM_IT_CC1);
