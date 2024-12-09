@@ -96,35 +96,39 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 	if (GPIO_Pin == pulse_input_Pin)
 	{
 		ZC = true;
-		if (power_loss_flag) {
-			// HAL_NVIC_SystemReset();
-		}
+		// if (power_loss_flag) {
+		// 	power_loss_flag = false;
+		// 	HAL_NVIC_SystemReset();
+		// }
 		// turn on triac and start timer 2
 		if (motorRun)
 		{
-			__HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, alpha); // Change CCR1 value dynamically
-			HAL_TIM_OC_Start_IT(&htim2, TIM_CHANNEL_1);			 // Starts the timer
+			// __HAL_TIM_SET_COMPARE(&htim2, TIM_CHANNEL_1, alpha); // Change CCR1 value dynamically
+			// HAL_TIM_OC_Start_IT(&htim2, TIM_CHANNEL_1);			 // Starts the timer
 			HAL_GPIO_WritePin(triac_gate_GPIO_Port, triac_gate_Pin, GPIO_PIN_SET);
+		} else {
+			HAL_GPIO_WritePin(triac_gate_GPIO_Port, triac_gate_Pin, GPIO_PIN_RESET);
 		}
 	}
 	if (GPIO_Pin == button1_Pin)
 	{
-		if (onStart && has_backup_data)
+		if (has_backup_data)
 		{
 			/* nếu là vừa mở máy, có dữ liệu backup và nút start được nhấn thì chạy ctrinh backup*/
 			backup_run_flag = true; // fix hêrre
+			has_backup_data = false;
 		}
 		else
 		{
-			if (procedure_run_flag == 1) {
-				flag = true;
-				paused = true;
-				procedure_run_flag = -4; //tam dung
-			} else if(procedure_run_flag == -4) {
-				flag = true;
-				paused = false;
-				procedure_run_flag = 1; // tiep tuc
-			}
+			// if (procedure_run_flag == 1) {
+			// 	flag = true;
+			// 	paused = true;
+			// 	procedure_run_flag = -4; //tam dung
+			// } else if(procedure_run_flag == -4) {
+			// 	flag = true;
+			// 	paused = false;
+			// 	procedure_run_flag = 1; // tiep tuc
+			// }
 			if ( !paused ) {
 				if (!HAL_GPIO_ReadPin(door_sensor_GPIO_Port, door_sensor_Pin))
 				{
@@ -139,6 +143,7 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 						procedure_run_flag = -1; //lỗi chưa chọn đủ input
 					}
 					if (procedure_run_flag == -3) { // tiếp tục chạy sau khi đã đóng cửa
+						HAL_ResumeTick();
 						procedure_run_flag = 1;
 					}
 				}
@@ -166,6 +171,7 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 			{
 				mode_select[0] = 1;
 			}
+			has_backup_data = false;
 		}
 		if (GPIO_Pin == button3_Pin)
 		{
@@ -178,6 +184,7 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 			{
 				mode_select[1] = 1;
 			}
+			has_backup_data = false;
 		}
 		if (GPIO_Pin == button4_Pin)
 		{
@@ -190,6 +197,7 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 			{
 				mode_select[2] = 1;
 			}
+			has_backup_data = false;
 		}
 	}
 }
@@ -204,7 +212,12 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 		 * Water level: 0% ~ f = 11300Hz; 100% ~ f = 9000Hz
 		 * Need to make a graph for this, temporarily use Linear
 		 */
-		water_level = (int)(-0.05 * freq_count + 550); // convert into 0-100% ax+b
+		int cal_level  = (int)((-0.04563 * freq_count) + 468.5045); // convert into 0-100% ax+b
+		if (cal_level < 0) {
+			water_level = 0;
+		} else {
+			water_level = cal_level;
+		}
 		// char data[16];
 		// sprintf(data, "w:%d c:%d%%", freq_count, water_level );
 		// lcd_goto_XY(1, 0);
@@ -255,6 +268,7 @@ int main(void)
 	updateLCD();
 	onStart = false;
 	procedure_init();
+
 	/* USER CODE END 2 */
 
 	/* Infinite loop */
@@ -262,15 +276,18 @@ int main(void)
 	while (1)
 	{
 		updateLCD();
-		// power_observer();
+		power_observer();
 		if (backup_run_flag) {
 			if (HAL_GPIO_ReadPin(door_sensor_GPIO_Port, door_sensor_Pin) && current_step!=1) {
 				/*if door is open when in other step than filling water, stop program and display error message*/
 				motorRun = false; // tắt động cơ
 				flag = true; //display door error message
 				procedure_run_flag = -3;
+				HAL_SuspendTick();
+				HAL_GPIO_WritePin(drain_gate_GPIO_Port, drain_gate_Pin, GPIO_PIN_RESET);
+				HAL_GPIO_WritePin(triac_gate_GPIO_Port, triac_gate_Pin, GPIO_PIN_RESET);
 			} else {
-				run_procedure(mode_select, water_level, &procedure_run_flag, &motorRun, &alpha);
+				run_procedure_backup(mode_select, water_level, &procedure_run_flag, &motorRun, &alpha);
 			}
 		}
 		if (procedure_run_flag == 1 )
@@ -280,6 +297,9 @@ int main(void)
 				motorRun = false; // tắt động cơ
 				flag = true; //display door error message
 				procedure_run_flag = -3;
+				HAL_SuspendTick();
+				HAL_GPIO_WritePin(drain_gate_GPIO_Port, drain_gate_Pin, GPIO_PIN_RESET);
+				HAL_GPIO_WritePin(triac_gate_GPIO_Port, triac_gate_Pin, GPIO_PIN_RESET);
 			} else {
 				run_procedure(mode_select, water_level, &procedure_run_flag, &motorRun, &alpha);
 			}
@@ -656,7 +676,10 @@ void updateLCD( void )
 			return;
 		case 1:
 			lcd_goto_XY(1, 0);
-			lcd_send_string("Bkup available! ");
+			char data[16];
+			sprintf(data, "Backup: %d %d %d %d        ", backupData_eeprom[0], backupData_eeprom[1], backupData_eeprom[2], backupData_eeprom[3]);
+			lcd_send_string(data);
+			// lcd_send_string("Bkup available! ");
 			lcd_goto_XY(2, 0);
 			lcd_send_string("START to resume ");
 			has_backup_data = true;
@@ -774,34 +797,36 @@ void updateLCD( void )
 void power_observer(void)
 {
 	static uint32_t power_observer_tick;
-	if (ZC == false && power_observer_tick == 0)
+	static bool data_saved = false;
+	if (ZC == true)
 	{
 		power_observer_tick = HAL_GetTick();
 	}
-	else
+
+	if (HAL_GetTick() - power_observer_tick > 40)
 	{
-		power_observer_tick = 0;
-	}
-	if (HAL_GetTick() - power_observer_tick > 20)
-	{
-		// if no pulse in 20ms = 1 cycle means power loss detected
+		// if no pulse in 40ms = 2 cycle means power loss detected
 		//  start saving backup data if running (procedure_run_flag == true)
 		if (procedure_run_flag && at24_isConnected())
 		{
-			/*
-			* Luu trạng thái khi mất điện
-			* byte[0]: mode_select[0] - chế độ giặt
-			* byte[1]: mode_select[1] - mực nước
-			* byte[2]: mode_select[2] - số lần xả yêu cầu
-			* byte[3]: current_step - bước giặt hiện tại
-			* byte[4]: drained_times - số lần xả đã thực hiện
-			* byte[5-8]: elapsed_time_per_mode - 4byte lưu thời gian đang giặt
-			*/
-			/*Luu cac bien the hien mode giat hien tai*/
-			at24_write(0, mode_select, 3, 500);
-			/*Luu cac bien extern tu washing_procedure*/
-			uint8_t data[6] = {current_step, drained_times, elapsed_time_per_mode>>24, elapsed_time_per_mode>>16, elapsed_time_per_mode>>8, elapsed_time_per_mode};
-			at24_write(3, data, 6, 500);
+			if (!data_saved) {
+				/*
+				* Luu trạng thái khi mất điện
+				* byte[0]: mode_select[0] - chế độ giặt
+				* byte[1]: mode_select[1] - mực nước
+				* byte[2]: mode_select[2] - số lần xả yêu cầu
+				* byte[3]: current_step - bước giặt hiện tại
+				* byte[4]: drained_times - số lần xả đã thực hiện
+				* byte[5-8]: elapsed_time_per_mode - 4byte lưu thời gian đang giặt
+				*/
+				/*Luu cac bien the hien mode giat hien tai*/
+				data_saved = true;
+				// at24_write(0, mode_select, 3, 500);
+				/*Luu cac bien extern tu washing_procedure*/
+				uint8_t data[6] = {mode_select[0], mode_select[1], mode_select[2], current_step, drained_times};
+				at24_write(0, data, sizeof(data), 500);
+				
+			}
 		}
 		power_loss_flag = true; 
 	}

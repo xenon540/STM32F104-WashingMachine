@@ -3,7 +3,7 @@
 ../Core/Src/washing_procedure.c:61:6:run_procedure_backup	24	static
 ../Core/Src/washing_procedure.c:117:6:start_procedure	16	static
 ../Core/Src/washing_procedure.c:121:6:m_fillWater	24	static
-../Core/Src/washing_procedure.c:147:6:m_wash	32	static
-../Core/Src/washing_procedure.c:211:6:m_drain	24	static
-../Core/Src/washing_procedure.c:242:6:m_spin	24	static
-../Core/Src/washing_procedure.c:276:6:making_3_beep_sound	8	static
+../Core/Src/washing_procedure.c:146:6:m_wash	32	static
+../Core/Src/washing_procedure.c:210:6:m_drain	24	static
+../Core/Src/washing_procedure.c:241:6:m_spin	24	static
+../Core/Src/washing_procedure.c:275:6:making_3_beep_sound	8	static

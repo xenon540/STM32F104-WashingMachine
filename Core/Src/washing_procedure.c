@@ -130,11 +130,10 @@ void m_fillWater( void ) {
             * Neu nuoc chua du, tiep tuc xa nuoc
             */
         	uint8_t data[16];
-            // sprintf(data, "Set:%d Cur: %d       ", m_mode_select[1]*10, m_current_water_level);
             lcd_goto_XY(1, 0);
             lcd_send_string("Filling water...");
             lcd_goto_XY(2, 0);
-            lcd_send_string("holder wtlevel  ");
+            lcd_send_string("                ");
             HAL_GPIO_WritePin(water_in_GPIO_Port, water_in_Pin, GPIO_PIN_SET);
         } else {
             HAL_GPIO_WritePin(water_in_GPIO_Port, water_in_Pin, GPIO_PIN_RESET);
@@ -172,12 +171,12 @@ void m_wash( void ) {
         if (HAL_GetTick() - time_wash < m_wash_interval) {
             if ((HAL_GetTick() - time_wash < 10000) || (HAL_GetTick() - time_wash > 15000)) {
                 *p_motorRun = true;
+                HAL_GPIO_WritePin(relay_GPIO_Port, relay_Pin, motor_dir ? GPIO_PIN_SET : GPIO_PIN_RESET);
                 if (HAL_GetTick() - change_direction_time > 3000) {
                     // dao chieu moi 3s
                     motor_dir = !motor_dir;
                     change_direction_time = HAL_GetTick();
                 }
-                HAL_GPIO_WritePin(relay_GPIO_Port, relay_Pin, motor_dir ? GPIO_PIN_SET : GPIO_PIN_RESET);
             }
             else {
                 /* tat dong co, ngam quan ao trong 5s*/
@@ -193,12 +192,12 @@ void m_wash( void ) {
         /* Cac mode giat con lai */
         if (HAL_GetTick() - time_wash < m_wash_interval) {
             *p_motorRun = true;
+            HAL_GPIO_WritePin(relay_GPIO_Port, relay_Pin, motor_dir ? GPIO_PIN_SET : GPIO_PIN_RESET);
             if (HAL_GetTick() - change_direction_time > 3000) {
                 // dao chieu moi 3s
                 motor_dir = !motor_dir;
                 change_direction_time = HAL_GetTick();
             }
-            HAL_GPIO_WritePin(relay_GPIO_Port, relay_Pin, motor_dir ? GPIO_PIN_SET : GPIO_PIN_RESET);
         } else {
             /* Giat xong, tat dong co, chuyen sang vat va xa */
             *p_motorRun = false;
@@ -216,9 +215,9 @@ void m_drain( void ) {
     char data[16];
     lcd_goto_XY(1, 0);
     lcd_send_string("Draining...     ");
-    // sprintf(data, "#:%d - Level:%d         ", m_current_water_level, drained_times);
+    sprintf(data, "cur:%d set:%d  ", drained_times, m_mode_select[2]);
     lcd_goto_XY(2, 0);
-    lcd_send_string("holder wtlevel  ");
+    lcd_send_string(data);
     if (m_current_water_level >= 10) {
         HAL_GPIO_WritePin(drain_gate_GPIO_Port, drain_gate_Pin, GPIO_PIN_SET);
         HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_SET);

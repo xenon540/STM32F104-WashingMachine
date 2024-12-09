@@ -147,7 +147,7 @@ int8_t check_eeprom(uint8_t backupData_eeprom[])
 
 	if (at24_isConnected())
 	{
-		at24_read(0, backupData_eeprom, 5, 500);
+		at24_read(0, backupData_eeprom, 6, 500);
 		for (int i = 0; i < 5; i++)
 		{
 			if (backupData_eeprom[i] != 0xFF)
