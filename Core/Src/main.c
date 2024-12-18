@@ -112,6 +112,7 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 	}
 	if (GPIO_Pin == button1_Pin)
 	{
+		HAL_ResumeTick();
 		if (has_backup_data)
 		{
 			/* nếu là vừa mở máy, có dữ liệu backup và nút start được nhấn thì chạy ctrinh backup*/
@@ -143,7 +144,6 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 						procedure_run_flag = -1; //lỗi chưa chọn đủ input
 					}
 					if (procedure_run_flag == -3) { // tiếp tục chạy sau khi đã đóng cửa
-						HAL_ResumeTick();
 						procedure_run_flag = 1;
 					}
 				}
@@ -219,7 +219,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 			water_level = cal_level;
 		}
 		// char data[16];
-		// sprintf(data, "w:%d c:%d%%", freq_count, water_level );
+		// sprintf(data, "w:%d c:%d%%f:%d", freq_count, water_level , HAL_GetTick());
 		// lcd_goto_XY(1, 0);
 		// lcd_send_string("test water level");
 		// lcd_goto_XY(2, 0);
@@ -275,7 +275,7 @@ int main(void)
 	/* USER CODE BEGIN WHILE */
 	while (1)
 	{
-		updateLCD();
+		// updateLCD();
 		power_observer();
 		if (backup_run_flag) {
 			if (HAL_GPIO_ReadPin(door_sensor_GPIO_Port, door_sensor_Pin) && current_step!=1) {
@@ -287,23 +287,25 @@ int main(void)
 				HAL_GPIO_WritePin(drain_gate_GPIO_Port, drain_gate_Pin, GPIO_PIN_RESET);
 				HAL_GPIO_WritePin(triac_gate_GPIO_Port, triac_gate_Pin, GPIO_PIN_RESET);
 			} else {
-				run_procedure_backup(mode_select, water_level, &procedure_run_flag, &motorRun, &alpha);
+				run_procedure_backup(mode_select, water_level, &backup_run_flag, &motorRun, &alpha);
+			}
+		} else {
+			if (procedure_run_flag == 1 )
+			{
+				if (HAL_GPIO_ReadPin(door_sensor_GPIO_Port, door_sensor_Pin) && current_step!=1) {
+					/*if door is open when in other step than filling water, stop program and display error message*/
+					motorRun = false; // tắt động cơ
+					flag = true; //display door error message
+					procedure_run_flag = -3;
+					HAL_SuspendTick();
+					HAL_GPIO_WritePin(drain_gate_GPIO_Port, drain_gate_Pin, GPIO_PIN_RESET);
+					HAL_GPIO_WritePin(triac_gate_GPIO_Port, triac_gate_Pin, GPIO_PIN_RESET);
+				} else {
+					run_procedure(mode_select, water_level, &procedure_run_flag, &motorRun, &alpha);
+				}
 			}
 		}
-		if (procedure_run_flag == 1 )
-		{
-			if (HAL_GPIO_ReadPin(door_sensor_GPIO_Port, door_sensor_Pin) && current_step!=1) {
-				/*if door is open when in other step than filling water, stop program and display error message*/
-				motorRun = false; // tắt động cơ
-				flag = true; //display door error message
-				procedure_run_flag = -3;
-				HAL_SuspendTick();
-				HAL_GPIO_WritePin(drain_gate_GPIO_Port, drain_gate_Pin, GPIO_PIN_RESET);
-				HAL_GPIO_WritePin(triac_gate_GPIO_Port, triac_gate_Pin, GPIO_PIN_RESET);
-			} else {
-				run_procedure(mode_select, water_level, &procedure_run_flag, &motorRun, &alpha);
-			}
-		}
+		
 		// if (!relayOn) {
 		// 	HAL_GPIO_WritePin(buzzer_GPIO_Port, buzzer_Pin, GPIO_PIN_RESET);
 		// 	HAL_GPIO_WritePin(relay_GPIO_Port, relay_Pin, GPIO_PIN_RESET);
@@ -820,11 +822,12 @@ void power_observer(void)
 				* byte[5-8]: elapsed_time_per_mode - 4byte lưu thời gian đang giặt
 				*/
 				/*Luu cac bien the hien mode giat hien tai*/
-				data_saved = true;
+				procedure_run_flag = -3; // câu lệnh này để dừng lại SysTick và chu trình giặt
 				// at24_write(0, mode_select, 3, 500);
 				/*Luu cac bien extern tu washing_procedure*/
 				uint8_t data[6] = {mode_select[0], mode_select[1], mode_select[2], current_step, drained_times};
 				at24_write(0, data, sizeof(data), 500);
+				data_saved = true;
 				
 			}
 		}

@@ -22,14 +22,14 @@ void procedure_init( void ) {
     runningFunc = &start_procedure;
 }
 void run_procedure( uint8_t mode[], uint8_t water_level, bool *procedure_run_flag, bool *motorRun, uint16_t *alpha) {
-    /*Các biến được truyền vào dạng tham chiếu nhằm thay đổi địa chỉ trong các hàm này*/
+    /*Các biến được truyền vào dạng tham chiếu nhằm thay đổi giá trị trong các hàm này*/
+    m_current_water_level = water_level; //gán giá trị
     if (wash_done) {
         /* after washing done, stop procedure*/
         *procedure_run_flag = false;
     }
     if (runningFunc == &start_procedure) {
         wash_done = false;
-        m_current_water_level = water_level; //gán địa chỉ, chỉ cần gán 1 lần nên bỏ vô đây
         p_motorRun = motorRun; //gán địa chỉ, chỉ cần gán 1 lần nên bỏ vô đây
         m_mode_select[0] = mode[0];
         m_mode_select[1] = mode[1];
@@ -59,7 +59,7 @@ void run_procedure( uint8_t mode[], uint8_t water_level, bool *procedure_run_fla
 }
 
 void run_procedure_backup( uint8_t backup_mode_data[], uint8_t water_level, bool *backup_run_flag, bool *motorRun, uint16_t *alpha) {
-    /*Các biến được truyền vào dạng tham chiếu nhằm thay đổi địa chỉ trong các hàm này*/
+    /*Các biến được truyền vào dạng tham chiếu nhằm thay đổi giá trị trong các hàm này*/
     if (wash_done) {
         /* after washing done, stop procedure*/
         *backup_run_flag = false;
@@ -68,8 +68,6 @@ void run_procedure_backup( uint8_t backup_mode_data[], uint8_t water_level, bool
     p_motorRun = motorRun;
     if (runningFunc == &start_procedure) {
         wash_done = false;
-        m_current_water_level = water_level; //gán địa chỉ, chỉ cần gán 1 lần nên bỏ vô đây
-        p_motorRun = motorRun; //gán địa chỉ, chỉ cần gán 1 lần nên bỏ vô đây
         m_mode_select[0] = backup_mode_data[0];
         m_mode_select[1] = backup_mode_data[1];
         m_mode_select[2] = backup_mode_data[2];
@@ -93,16 +91,21 @@ void run_procedure_backup( uint8_t backup_mode_data[], uint8_t water_level, bool
         }
         m_drain_times = m_mode_select[2];
         drained_times = backup_mode_data[4];
+        char data[16];
+        sprintf(data, "woo:%dc:%d%%tik:%d", drained_times, water_level , HAL_GetTick());
+        lcd_goto_XY(1, 0);
+        lcd_send_string(data);
         switch (backup_mode_data[3]) {
             case 1: 
                 runningFunc = &m_fillWater;
+                lcd_goto_XY(2, 0);
+                lcd_send_string("test backup mode");
                 break;
             case 2:
                 runningFunc = &m_wash;
                 break;
             case 3: 
                 runningFunc = &m_drain;
-                drained_times = backup_mode_data[4];
                 break;
             case 4:
                 runningFunc = &m_spin;
@@ -124,7 +127,7 @@ void m_fillWater( void ) {
         runningFunc = &m_spin;
     } else {
         current_step = 1;
-        if ( m_current_water_level <= m_mode_select[1]*10 ) { 
+        if (    m_current_water_level <= m_mode_select[1]*10 ) { 
             /*
             * Ham chu trinh xa nuoc 
             * Neu nuoc chua du, tiep tuc xa nuoc
